@@ -28,6 +28,8 @@ NSUPDATE_RRTYPE=${NSUPDATE_RRTYPE:-KEY}
 KEY_TYPE=${KEY_TYPE:-15}
 NSUPDATE_RR_PARAMS=${NSUPDATE_RR_PARAMS:-128 3 ${KEY_TYPE}}
 
+DIG_SERVER=${DIG_SERVER:-@abulafia.free2air.net}
+
 case ${ACTION} in
 	add|genkey)
 		cat <<EOF >${ZENCODE_SCRIPT}.zen
@@ -64,7 +66,7 @@ EOF
 EOF
 		;;
 	read|show|get)
-		read flags version algorithm public_key < <(echo -n $(dig +short ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_RRTYPE}))
+		read flags version algorithm public_key < <(echo -n $(dig +short ${DIG_SERVER} ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_RRTYPE}))
 		echo $(echo ${public_key} | base64 -id | xxd -p -c128)
 		;;
 	*)
