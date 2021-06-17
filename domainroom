@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+##  @author Adam Burns
+##  @license AGPLv3
+##  @copyright Dyne.org foundation 2021
+#
+ACTION=${1:-add}
+ZENCODE_KNOWNAS=${2:-Alice}
+KEY_TYPE="${3:-ed25519}"
+
+ZENROOM_EXE=${ZENROOM_EXE:-/home/vortex/src/dyne/Zenroom/bb/zenroom}
+ZENROOM_OPTIONS=${ZENROOM_OPTIONS:--c "rngseed=hex:74eeeab870a394175fae808dd5dd3b047f3ee2d6a8d01e14bff94271565625e98a63babe8dd6cbea6fedf3e19de4bc80314b861599522e44409fdd20f7cd6cfc"}
+ZENCODE_SCENARIO=${ZENCODE_SCENARIO:-ecdh}
+ZENCODE_KNOWNAS=${ZENCODE_KNOWNAS:-Alice}
+
+ZENCODE_SCRIPT=${ZENCODE_SCRIPT:-keygen}
+
+NSUPDATE_EXE=${NSUPDATE_EXE:-$(which nsupdate)}
+NSUPDATE_ACTION=${NSUPDATE_ACTION:-add}
+NSUPDATE_ZONE=${NSUPDATE_ZONE:-zenr.io}
+NSUPDATE_ENTRY=${NSUPDATE_ENTRY:-${ZENCODE_KNOWNAS}}
+NSUPDATE_TTL=${NSUPDATE_TTL:-60}
+NSUPDATE_RRTYPE=${NSUPDATE_RRTYPE:-KEY}
+KEY_TYPE=${KEY_TYPE:-15}
+NSUPDATE_RR_PARAMS=${NSUPDATE_RR_PARAMS:-128 3 ${KEY_TYPE}}
+
+case ${ACTION} in
+	add|genkey)
+		cat <<EOF >${ZENCODE_SCRIPT}.zen
+		rule check version 1.2.0
+		Scenario '${ZENCODE_SCENARIO}': Create the keypair
+		Given that I am known as '${ZENCODE_KNOWNAS}'
+		When I create the keypair
+		Then print my data as 'base64'
+EOF
+		read public_key_base64 private_key_base64  < <(echo $(${ZENROOM_EXE} ${ZENROOM_OPTIONS} -z ${ZENCODE_SCRIPT}.zen 2>${ZENCODE_SCRIPT}.log | jq  --raw-output ".${ZENCODE_KNOWNAS}.keypair.public_key, .${ZENCODE_KNOWNAS}.keypair.private_key"))
+
+		${NSUPDATE_EXE} << EOF
+		update ${NSUPDATE_ACTION} ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_TTL} ${NSUPDATE_RRTYPE} ${NSUPDATE_RR_PARAMS} ${public_key_base64}
+		send
+EOF
+		public_key=$(echo -n ${public_key_base64} | base64 -id | xxd -p -c128)
+		private_key=$(echo -n ${private_key_base64} | base64 -id | xxd -p -c128)
+		public_key_octets=$(expr $(echo -n ${public_key} | wc -m) / 2)
+		private_key_octets=$(expr $(echo -n ${private_key} | wc -m) / 2)
+		echo
+		echo "${ZENCODE_KNOWNAS} ED25519 public  ${public_key} (${public_key_octets} octets)"
+		echo "${ZENCODE_KNOWNAS} ED25519 private ${private_key} (${private_key_octets} octets)"
+		echo
+		echo "dns->${NSUPDATE_ACTION} ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_TTL} ${NSUPDATE_RRTYPE} ${NSUPDATE_RR_PARAMS} ${public_key_base64}"
+		echo "         ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE}  private key ${KEY_TYPE} ${private_key_base64}"
+		echo
+		;;
+	delete|del|remove|rem)
+		NSUPDATE_ACTION=delete
+		#echo "update ${NSUPDATE_ACTION} ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_TTL} ${NSUPDATE_RRTYPE}"
+		${NSUPDATE_EXE} << EOF
+		update ${NSUPDATE_ACTION} ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_TTL} ${NSUPDATE_RRTYPE}
+		send
+EOF
+		;;
+	read|show|get)
+		read flags version algorithm public_key < <(echo -n $(dig +short @abulafia.free2air.net ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_RRTYPE}))
+		echo $(echo ${public_key} | base64 -id | xxd -p -c128)
+		;;
+	*)
+		echo "unknown action"
+		;;
+esac
+
+
