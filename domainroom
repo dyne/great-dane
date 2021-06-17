@@ -4,6 +4,10 @@
 ##  @license AGPLv3
 ##  @copyright Dyne.org foundation 2021
 #
+#   A tool to explore the use DNSSEC as a AV store for Zenroom
+#
+#   Currently only works with zenroom rebuilt for ED25519
+#
 ACTION=${1:-add}
 ZENCODE_KNOWNAS=${2:-Alice}
 KEY_TYPE="${3:-ed25519}"
