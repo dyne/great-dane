@@ -64,7 +64,7 @@ EOF
 EOF
 		;;
 	read|show|get)
-		read flags version algorithm public_key < <(echo -n $(dig +short @abulafia.free2air.net ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_RRTYPE}))
+		read flags version algorithm public_key < <(echo -n $(dig +short ${NSUPDATE_ENTRY}.${NSUPDATE_ZONE} ${NSUPDATE_RRTYPE}))
 		echo $(echo ${public_key} | base64 -id | xxd -p -c128)
 		;;
 	*)
