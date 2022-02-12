@@ -13,6 +13,8 @@ import (
     "os"
     "log"
     "fmt"
+    "strings"
+    "strconv"
 )
 
 func main() {
@@ -79,13 +81,18 @@ func main() {
         dk, pkerr := dns.ReadRR(pubfh, sig0Keyfiles+".key")
         if pkerr != nil { log.Fatal(pkerr) }
 
-	log.Println(spew.Sdump(dk))
+	// TODO: extract alg number more eloquently! :/
+        test := fmt.Sprintln(dk)
+        testSplit := strings.SplitN(test, " ", 7)[2]
+        log.Printf("testSplit: %s", testSplit)
+        algnum, err := strconv.ParseUint(testSplit, 10, 8)
+        log.Println("pub split alg:", algnum)
 
         privfh, oerr := os.Open(sig0Keyfiles+".private")
         if oerr != nil { log.Fatal(oerr) }
         defer privfh.Close()
 
-        privkey, readerr := dk.(*dns.DNSKEY).ReadPrivateKey(privfh, sig0Keyfiles+".private")
+        privkey, readerr := dk.(*dns.KEY).ReadPrivateKey(privfh, sig0Keyfiles+".private")
         if readerr == nil {
             log.Println(spew.Sdump(privkey))
             log.Println("OK")
@@ -102,8 +109,8 @@ func main() {
 	keyRR.Hdr.Ttl = 600
 	keyRR.Flags = 512
 	keyRR.Protocol = 3
-	keyRR.Algorithm = uint8(dns.ED25519) // TODO set to numeric alg 6th space separated field of dnssec-keygen .key file eg 15 is ED25519
-	keyRR.PublicKey = "2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=" 
+	keyRR.Algorithm = uint8(algnum)
+	keyRR.PublicKey = "2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=" // TODO: make generic from dk
 
 	// Test Generate new ED25519 key
         pk, err := keyRR.Generate(256)
@@ -121,24 +128,46 @@ func main() {
 	sig0RR.Hdr.Name = "."
 	sig0RR.Hdr.Rrtype = dns.TypeSIG
 	sig0RR.Hdr.Class = dns.ClassANY
-	sig0RR.Algorithm = uint8(dns.ED25519) // TODO set to alg type of key
+	sig0RR.Algorithm = uint8(algnum)
 	sig0RR.Expiration = now + 300
         sig0RR.Inception = now - 300
         sig0RR.KeyTag = keyRR.KeyTag()
         sig0RR.SignerName = keyRR.Hdr.Name
-        mb, err := sig0RR.Sign(pk.(crypto.Signer), m)
-        // mb, err := sig0RR.Sign(privkey.(crypto.Signer), m)
+        // mb, err := sig0RR.Sign(pk.(crypto.Signer), m)
+        mb, err := sig0RR.Sign(privkey.(crypto.Signer), m)
 	// mb, err := sig0RR.Sign(dk.(crypto.Signer), m)
 
+        algstr := dns.AlgorithmToString[keyRR.Algorithm]
+
 	if err != nil {
-            log.Printf("failed to sign message: %v", err)
+            log.Printf("failed to sign %v message: %v", algstr, err)
         }
 
 	log.Println(spew.Sdump(mb))
 	
-//	if err := m.Unpack(mb); err != nil {
-//          log.Fatalf("failed to unpack message: %v", err)
-//      }
+	if err := m.Unpack(mb); err != nil {
+            log.Fatalf("failed to unpack message: %v", err)
+        }
+
+        // verify signing
+        var sigrrwire *dns.SIG
+        switch rr := m.Extra[0].(type) {
+        case *dns.SIG:
+                sigrrwire = rr
+        default:
+                log.Fatalf("expected SIG RR, instead: %v", rr)
+        }
+
+        for _, rr := range []*dns.SIG{sig0RR, sigrrwire} {
+                id := "sig0RR"
+                if rr == sigrrwire {
+                        id = "sigrrwire"
+                }
+                if err := rr.Verify(keyRR, mb); err != nil {
+                        log.Fatalf("failed to verify “%s” signed SIG(%s): %v", algstr, id, err)
+                }
+        }
+
 
 	spew.Dump(sig0RR)
     }
