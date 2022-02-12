@@ -85,7 +85,7 @@ func main() {
         if oerr != nil { log.Fatal(oerr) }
         defer privfh.Close()
 
-        privkey, readerr := dk.(*dns.KEY).ReadPrivateKey(privfh, sig0Keyfiles+".private")
+        privkey, readerr := dk.(*dns.DNSKEY).ReadPrivateKey(privfh, sig0Keyfiles+".private")
         if readerr == nil {
             log.Println(spew.Sdump(privkey))
             log.Println("OK")
