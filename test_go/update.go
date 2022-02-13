@@ -50,7 +50,7 @@ func main() {
     log.Printf("Using FQDN RR entry of %s\n", fqdn)
 
     // TODO make RR generic, for now A record for localhost
-    myRR := fmt.Sprintf("%s.%s 600 IN A 127.0.0.1", host, zone)
+    myRR := fmt.Sprintf("%s.%s 600 IN A 127.0.0.4", host, zone)
     log.Printf("myRR = %s\n", myRR)
 
     log.Println("-- Set dns.Msg Structure --")
@@ -86,7 +86,8 @@ func main() {
         testSplit := strings.SplitN(test, " ", 7)[2]
         log.Printf("testSplit: %s", testSplit)
         algnum, err := strconv.ParseUint(testSplit, 10, 8)
-        log.Println("pub split alg:", algnum)
+        log.Println("pub split alg:", uint8(algnum))
+
 
         privfh, oerr := os.Open(sig0Keyfiles+".private")
         if oerr != nil { log.Fatal(oerr) }
@@ -99,7 +100,13 @@ func main() {
         } else {
             log.Println(spew.Sdump(privkey, readerr))
         }
-        // create & fill KEY structure (see sig0_test.go for guidance)
+
+	// // fill KEY structure for keyfiles key see dns_test.go
+        // keyRR := &dns.DNSKEY{Flags: 257, Protocol: 3, Algorithm: dns.ED25519}
+        // keyRR.Hdr = dns.RR_Header{Name: "vortex.zenr.io.", Rrtype: dns.TypeDNSKEY, Class: dns.ClassINET, Ttl: 3600}
+	// // vortex.zenr.io. IN KEY 512 3 15 2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=
+
+	// create & fill KEY structure (see sig0_test.go for guidance)
         log.Println("-- TODO Create and fill KEY structure from dnssec-keygen keyfiles --")
         keyRR := new(dns.KEY)
         // keyRR.Hdr.Name = dns.AlgorithmToString[uint8(dns.ED25519)] + "." // TODO set to RRset 1st space separated field of dnssec-keygen .key file eg vortex.zenr.io.
@@ -112,12 +119,12 @@ func main() {
 	keyRR.Algorithm = uint8(algnum)
 	keyRR.PublicKey = "2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=" // TODO: make generic from dk
 
-	// Test Generate new ED25519 key
-        pk, err := keyRR.Generate(256)
-        if err != nil {
-                log.Println("failed to generate key: %v", err)
-        }
-	log.Println(spew.Sdump(pk))
+	// // Test Generate new ED25519 key
+        // pk, err := keyRR.Generate(256)
+        // if err != nil {
+        //         log.Println("failed to generate key: %v", err)
+        // }
+	// log.Println(spew.Sdump(pk))
 
 	spew.Dump(keyRR)
 
@@ -164,7 +171,7 @@ func main() {
                         id = "sigrrwire"
                 }
                 if err := rr.Verify(keyRR, mb); err != nil {
-                        log.Fatalf("failed to verify “%s” signed SIG(%s): %v", algstr, id, err)
+                        log.Fatalf("failed to verify %q signed SIG(%s): %v", algstr, id, err)
                 }
         }
 
