@@ -126,7 +126,7 @@ func main() {
         // }
 	// log.Println(spew.Sdump(pk))
 
-	spew.Dump(keyRR)
+	log.Println(keyRR)
 
         // create & fill SIG structure (see sig0_test.go for guidance)
 	log.Println("-- TODO Create, fill & attach SIG RR to dns.Msg Structure --")
@@ -150,7 +150,7 @@ func main() {
             log.Printf("failed to sign %v message: %v", algstr, err)
         }
 
-	log.Println(spew.Sdump(mb))
+	log.Println(mb)
 	
 	if err := m.Unpack(mb); err != nil {
             log.Fatalf("failed to unpack message: %v", err)
@@ -176,10 +176,9 @@ func main() {
         }
 
 
-	spew.Dump(sig0RR)
+	log.Println(sig0RR)
     }
 
-    log.Println(spew.Sdump(m))
 
 
     log.Println("-- Configure client DNS method --")
@@ -193,6 +192,8 @@ func main() {
     if r == nil {
         log.Fatalf("*** error: %s\n", err.Error())
     }
+
+    log.Println(m)
 
     if r.Rcode != dns.RcodeSuccess {
     	if r.Rcode == dns.RcodeRefused {
@@ -209,6 +210,6 @@ func main() {
     for _, a := range r.Answer {
             fmt.Printf("%v\n", a)
     }
-    spew.Dump(r)
+    log.Println(r)
 }
 
