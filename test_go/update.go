@@ -6,7 +6,7 @@ package main
 
 import (
     "github.com/miekg/dns"
-    "github.com/davecgh/go-spew/spew"
+    // "github.com/davecgh/go-spew/spew"
     "crypto"
     "net"
     "time"
@@ -18,6 +18,8 @@ import (
 )
 
 func main() {
+
+    var sig0Keyfiles string
 
     // TODO: Tidy env var extraction
     log.Printf("-- Collect Environment Variables --\n")
@@ -45,13 +47,16 @@ func main() {
     } else {
         log.Printf("GD_SERVER = %s\n", server)
     }
-
-    fqdn := fmt.Sprintf("%s.%s", host, zone)
-    log.Printf("Using FQDN RR entry of %s\n", fqdn)
+    sig0Keyfiles, ok = os.LookupEnv("GD_SIG0_KEYFILES")
+    if !ok {
+        log.Println("No GD_SIG0_KEYFILES ENV var defined")
+    } else {
+        log.Printf("GD_SIG0_KEYFILES = %s\n", sig0Keyfiles)
+    }
 
     // TODO make RR generic, for now A record for localhost
     myRR := fmt.Sprintf("%s.%s 600 IN A 127.0.0.4", host, zone)
-    log.Printf("myRR = %s\n", myRR)
+    // log.Printf("myRR = %s\n", myRR)
 
     log.Println("-- Set dns.Msg Structure --")
     m := new(dns.Msg)
@@ -63,17 +68,17 @@ func main() {
         panic(err)
     }
 
-    log.Println(spew.Sdump(rrInsert))
+    // log.Println(spew.Sdump(rrInsert))
 
     m.Insert([]dns.RR{rrInsert})
 
-
-    sig0Keyfiles, ok := os.LookupEnv("GD_SIG0_KEYFILES")
-    if !ok {
-        log.Println("No GD_SIG0_KEYFILES ENV var defined")
+    // sig0Keyfiles, ok := os.LookupEnv("GD_SIG0_KEYFILES")
+    if sig0Keyfiles == "" {
+        // log.Println("No GD_SIG0_KEYFILES ENV var defined")
+        log.Println("No sig0Keyfiles defined")
     } else {
         log.Println("-- Read SIG(0) Keyfiles --")
-        log.Printf("GD_SIG0_KEYFILES = %s", sig0Keyfiles)
+        // log.Printf("GD_SIG0_KEYFILES = %s", sig0Keyfiles)
         pubfh, perr := os.Open(sig0Keyfiles+".key")
         if perr != nil { log.Fatal(perr) }
         defer pubfh.Close()
@@ -82,23 +87,34 @@ func main() {
         if pkerr != nil { log.Fatal(pkerr) }
 
 	// TODO: extract alg number more eloquently! :/
-        test := fmt.Sprintln(dk)
-        testSplit := strings.SplitN(test, " ", 7)[2]
-        log.Printf("testSplit: %s", testSplit)
-        algnum, err := strconv.ParseUint(testSplit, 10, 8)
-        log.Println("pub split alg:", uint8(algnum))
+        // test := fmt.Sprintln(dk)
+	// TODO: how best to get public key to insert into keyRR more elegantly! :/
+	// keyFields := strings.Fields(test)
+	keyFields := strings.Fields(fmt.Sprintln(dk))
+	keyName := keyFields[0]
+	keyTTL := keyFields[1]
+	keyClass := keyFields[2]
+	keyType := keyFields[3]
+	keyFlags := keyFields[4]
+	keyVersion := keyFields[5]
+	keyAlgorithm := keyFields[6]
+	keyPublicKey := keyFields[7]
 
+	keyAlgNum,err := strconv.ParseUint(keyAlgorithm, 10, 8)
+
+	log.Println(sig0Keyfiles + ".key import:", keyName, keyTTL, keyClass, keyType, keyFlags, keyVersion, keyAlgorithm, keyPublicKey)
 
         privfh, oerr := os.Open(sig0Keyfiles+".private")
         if oerr != nil { log.Fatal(oerr) }
         defer privfh.Close()
 
         privkey, readerr := dk.(*dns.KEY).ReadPrivateKey(privfh, sig0Keyfiles+".private")
+	log.Println(sig0Keyfiles + ".private import:", privkey)
         if readerr == nil {
-            log.Println(spew.Sdump(privkey))
+            // log.Println(spew.Sdump(privkey))
             log.Println("OK")
         } else {
-            log.Println(spew.Sdump(privkey, readerr))
+            // log.Println(spew.Sdump(privkey, readerr))
         }
 
 	// // fill KEY structure for keyfiles key see dns_test.go
@@ -107,26 +123,18 @@ func main() {
 	// // vortex.zenr.io. IN KEY 512 3 15 2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=
 
 	// create & fill KEY structure (see sig0_test.go for guidance)
-        log.Println("-- TODO Create and fill KEY structure from dnssec-keygen keyfiles --")
+        log.Println("-- TODO In progress ... Create and fill KEY structure from dnssec-keygen keyfiles --")
         keyRR := new(dns.KEY)
-        // keyRR.Hdr.Name = dns.AlgorithmToString[uint8(dns.ED25519)] + "." // TODO set to RRset 1st space separated field of dnssec-keygen .key file eg vortex.zenr.io.
         keyRR.Hdr.Name = "vortex.zenr.io." // TODO set to RRset 1st space separated field of dnssec-keygen .key file eg vortex.zenr.io.
 	keyRR.Hdr.Rrtype = dns.TypeKEY
 	keyRR.Hdr.Class = dns.ClassINET
 	keyRR.Hdr.Ttl = 600
 	keyRR.Flags = 512
 	keyRR.Protocol = 3
-	keyRR.Algorithm = uint8(algnum)
-	keyRR.PublicKey = "2MK3KZkUgYQVumU9bhy1KzIZ2FhFQZ8yLP2nFMJRCEQ=" // TODO: make generic from dk
+	keyRR.Algorithm = uint8(keyAlgNum)
+	keyRR.PublicKey = keyPublicKey
 
-	// // Test Generate new ED25519 key
-        // pk, err := keyRR.Generate(256)
-        // if err != nil {
-        //         log.Println("failed to generate key: %v", err)
-        // }
-	// log.Println(spew.Sdump(pk))
-
-	log.Println(keyRR)
+	// spew.Dump(keyRR)
 
         // create & fill SIG structure (see sig0_test.go for guidance)
 	log.Println("-- TODO Create, fill & attach SIG RR to dns.Msg Structure --")
@@ -135,14 +143,12 @@ func main() {
 	sig0RR.Hdr.Name = "."
 	sig0RR.Hdr.Rrtype = dns.TypeSIG
 	sig0RR.Hdr.Class = dns.ClassANY
-	sig0RR.Algorithm = uint8(algnum)
+	sig0RR.Algorithm = uint8(keyAlgNum)
 	sig0RR.Expiration = now + 300
         sig0RR.Inception = now - 300
         sig0RR.KeyTag = keyRR.KeyTag()
         sig0RR.SignerName = keyRR.Hdr.Name
-        // mb, err := sig0RR.Sign(pk.(crypto.Signer), m)
         mb, err := sig0RR.Sign(privkey.(crypto.Signer), m)
-	// mb, err := sig0RR.Sign(dk.(crypto.Signer), m)
 
         algstr := dns.AlgorithmToString[keyRR.Algorithm]
 
@@ -150,7 +156,7 @@ func main() {
             log.Printf("failed to sign %v message: %v", algstr, err)
         }
 
-	log.Println(mb)
+	// log.Println(spew.Sdump(mb))
 	
 	if err := m.Unpack(mb); err != nil {
             log.Fatalf("failed to unpack message: %v", err)
@@ -176,9 +182,10 @@ func main() {
         }
 
 
-	log.Println(sig0RR)
+	// spew.Dump(sig0RR)
     }
 
+    // log.Println(spew.Sdump(m))
 
 
     log.Println("-- Configure client DNS method --")
@@ -193,8 +200,6 @@ func main() {
         log.Fatalf("*** error: %s\n", err.Error())
     }
 
-    log.Println(m)
-
     if r.Rcode != dns.RcodeSuccess {
     	if r.Rcode == dns.RcodeRefused {
     	        log.Printf(" ***  DNS response refused by server %s for zone (%s)", server, zone)
@@ -205,11 +210,13 @@ func main() {
         log.Printf(" ***  DNS response from server %s for zone (%s) reports success", server, zone)
     }
     // Stuff must be in the answer section
+    // is this useful? does not return anything
 
     log.Printf("-- Answer --")
     for _, a := range r.Answer {
             fmt.Printf("%v\n", a)
     }
+    // spew.Dump(r)
     log.Println(r)
 }
 
