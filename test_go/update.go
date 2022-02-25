@@ -2,6 +2,7 @@
 // usage:
 //	go run update.go <domain>
 // where <domain> is the FQDN for the update
+// see https://datatracker.ietf.org/doc/html/rfc3007 for hints
 package main
 
 import (
@@ -55,7 +56,7 @@ func main() {
     }
 
     // TODO make RR generic, for now A record for localhost
-    myRR := fmt.Sprintf("%s.%s 600 IN A 127.0.0.4", host, zone)
+    myRR := fmt.Sprintf("%s.%s 600 IN A 127.0.0.5", host, zone)
     // log.Printf("myRR = %s\n", myRR)
 
     log.Println("-- Set dns.Msg Structure --")
@@ -72,12 +73,11 @@ func main() {
 
     m.Insert([]dns.RR{rrInsert})
 
-    // sig0Keyfiles, ok := os.LookupEnv("GD_SIG0_KEYFILES")
     if sig0Keyfiles == "" {
-        // log.Println("No GD_SIG0_KEYFILES ENV var defined")
+        // log.Println("No sig(0) keypair files defined")
         log.Println("No sig0Keyfiles defined")
     } else {
-        log.Println("-- Read SIG(0) Keyfiles --")
+        log.Println("-- Reading SIG(0) Keyfiles (dnssec-keygen format) --")
         // log.Printf("GD_SIG0_KEYFILES = %s", sig0Keyfiles)
         pubfh, perr := os.Open(sig0Keyfiles+".key")
         if perr != nil { log.Fatal(perr) }
